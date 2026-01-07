@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Data (si tu ne veux pas versionner les CSV)
+data/
+
+# Streamlit
+.streamlit/
+
+# OS
+.DS_Store
