@@ -1,4 +1,5 @@
-from quant_project.core import run
+from quant_project.quant_a.core import run
+
 
 def main():
     run()
