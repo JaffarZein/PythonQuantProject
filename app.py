@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import io
 
 from quant_project.fetch_yahoo import fetch_ohlcv
-from quant_project.strategy import sma_crossover
-from quant_project.backtest import run_backtest
-from quant_project.metrics import compute_metrics
+from quant_project.quant_a.strategy import sma_crossover
+from quant_project.quant_a.backtest import run_backtest
+from quant_project.quant_a.metrics import compute_metrics
+
 
 st.set_page_config(page_title="Quant Project – Backtesting App", layout="wide")
 
@@ -185,10 +187,14 @@ if run_button:
     # -------- Download
     st.subheader("Download results")
 
-    csv = results.reset_index().to_csv(index=False).encode("utf-8")
+   
+
+    csv_buffer = io.StringIO()
+    results.to_csv(csv_buffer, index=False)
+
     st.download_button(
         label="Download results as CSV",
-        data=csv,
-        file_name=f"{symbol}_backtest_results.csv",
+        data=csv_buffer.getvalue(),
+        file_name="backtest_results.csv",
         mime="text/csv",
     )
