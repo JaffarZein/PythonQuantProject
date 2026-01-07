@@ -1,123 +1,191 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 from quant_project.fetch_yahoo import fetch_ohlcv
 from quant_project.strategy import sma_crossover
 from quant_project.backtest import run_backtest
-from quant_project.metrics import compute_metrics, compute_bh_metrics
+from quant_project.metrics import compute_metrics
 
+st.set_page_config(page_title="Quant Project – Backtesting App", layout="wide")
 
-# =============================
-# Page config
-# =============================
-st.set_page_config(
-    page_title="Quant Project – Backtesting App",
-    layout="wide",
-)
-
-st.title("Quant Project – Backtesting App")
-
-
-# =============================
-# Sidebar – parameters
-# =============================
-st.sidebar.header("Strategy parameters")
+# =========================
+# Sidebar – Parameters
+# =========================
+st.sidebar.title("Strategy parameters")
 
 symbol = st.sidebar.text_input("Symbol", value="AAPL")
 start_date = st.sidebar.date_input("Start date", value=pd.to_datetime("2020-01-01"))
 end_date = st.sidebar.date_input("End date", value=pd.to_datetime("2023-01-01"))
 
-fast = st.sidebar.slider("Fast SMA", min_value=5, max_value=100, value=20)
-slow = st.sidebar.slider("Slow SMA", min_value=20, max_value=200, value=50)
+fast_sma = st.sidebar.slider("Fast SMA", min_value=5, max_value=100, value=20)
+slow_sma = st.sidebar.slider("Slow SMA", min_value=10, max_value=300, value=50)
 
 initial_capital = st.sidebar.number_input(
-    "Initial capital",
-    min_value=1_000,
-    max_value=1_000_000,
-    value=10_000,
-    step=1_000,
+    "Initial capital", min_value=1_000, max_value=1_000_000, value=10_000, step=1_000
 )
 
 strategy_name = st.sidebar.selectbox(
     "Strategy",
-    ["SMA Crossover"],  # extensible
+    options=["SMA Crossover"],
 )
 
 run_button = st.sidebar.button("Run backtest")
 
+# =========================
+# Helper functions
+# =========================
+def compute_drawdown(equity: pd.Series) -> pd.Series:
+    cummax = equity.cummax()
+    return equity / cummax - 1.0
 
-# =============================
-# Run backtest
-# =============================
+
+def extract_trades(df: pd.DataFrame) -> pd.DataFrame:
+    trades = []
+
+    position = 0
+    entry_date = None
+    entry_equity = None
+    direction = None
+
+    for date, row in df.iterrows():
+        if position == 0 and row["position"] != 0:
+            position = row["position"]
+            entry_date = date
+            entry_equity = row["equity"]
+            direction = "Long" if position == 1 else "Short"
+
+        elif position != 0 and row["position"] != position:
+            exit_date = date
+            exit_equity = row["equity"]
+
+            pnl_eur = exit_equity - entry_equity
+            pnl_pct = pnl_eur / entry_equity
+
+            trades.append(
+                {
+                    "Entry date": entry_date,
+                    "Exit date": exit_date,
+                    "Direction": direction,
+                    "PnL %": pnl_pct * 100,
+                    "PnL €": pnl_eur,
+                }
+            )
+
+            position = row["position"]
+            entry_date = date if position != 0 else None
+            entry_equity = row["equity"] if position != 0 else None
+            direction = (
+                "Long" if position == 1 else "Short" if position == -1 else None
+            )
+
+    return pd.DataFrame(trades)
+
+
+# =========================
+# Main
+# =========================
+st.title("Quant Project – Backtesting App")
+
 if run_button:
-    with st.spinner("Running backtest..."):
-        # --- Data ---
-        df = fetch_ohlcv(
-            symbol=symbol,
-            start=str(start_date),
-            end=str(end_date),
-            interval="1d",
-        )
+    # -------- Data
+    df = fetch_ohlcv(
+        symbol=symbol,
+        start=str(start_date),
+        end=str(end_date),
+        interval="1d",
+    )
 
-        # --- Strategy ---
-        if strategy_name == "SMA Crossover":
-            signal = sma_crossover(df, fast=fast, slow=slow)
+    # -------- Strategy
+    signal = sma_crossover(df, fast=fast_sma, slow=slow_sma)
 
-        # --- Backtest ---
-        results = run_backtest(
-            df=df,
-            signal=signal,
-            initial_capital=initial_capital,
-        )
+    results = run_backtest(
+        df=df,
+        signal=signal,
+        initial_capital=initial_capital,
+    )
 
-        # --- Metrics ---
-        metrics_strategy = compute_metrics(results)
-        metrics_bh = compute_bh_metrics(results)
+    # -------- Metrics
+    metrics = compute_metrics(results)
 
-    # =============================
-    # Metrics display
-    # =============================
+    # Buy & Hold
+    bh_equity = initial_capital * (1 + results["returns"]).cumprod()
+    bh_df = results.copy()
+    bh_df["equity"] = bh_equity
+    bh_metrics = compute_metrics(bh_df)
+
+    # -------- Performance metrics display
     st.subheader("Performance metrics")
 
     col1, col2 = st.columns(2)
 
     with col1:
         st.markdown("### Strategy")
-        st.metric("Total Return", f"{metrics_strategy['total_return']:.2%}")
-        st.metric("Sharpe Ratio", f"{metrics_strategy['sharpe_ratio']:.2f}")
-        st.metric("Max Drawdown", f"{metrics_strategy['max_drawdown']:.2%}")
-        st.metric("Number of trades", metrics_strategy["n_trades"])
-        st.metric("Win rate", f"{metrics_strategy['win_rate']:.2%}")
-        st.metric("Exposure", f"{metrics_strategy['exposure']:.2%}")
+        st.metric("Total Return", f"{metrics['total_return']*100:.2f}%")
+        st.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
+        st.metric("Max Drawdown", f"{metrics['max_drawdown']*100:.2f}%")
+        st.metric("Number of trades", int(metrics["n_trades"]))
+        st.metric("Win rate", f"{metrics['win_rate']*100:.2f}%")
+        st.metric("Exposure", f"{metrics['exposure']*100:.2f}%")
 
     with col2:
         st.markdown("### Buy & Hold")
-        st.metric("Total Return", f"{metrics_bh['total_return']:.2%}")
-        st.metric("Sharpe Ratio", f"{metrics_bh['sharpe_ratio']:.2f}")
-        st.metric("Max Drawdown", f"{metrics_bh['max_drawdown']:.2%}")
+        st.metric("Total Return", f"{bh_metrics['total_return']*100:.2f}%")
+        st.metric("Sharpe Ratio", f"{bh_metrics['sharpe_ratio']:.2f}")
+        st.metric("Max Drawdown", f"{bh_metrics['max_drawdown']*100:.2f}%")
 
-    # =============================
-    # Equity curves
-    # =============================
+    # -------- Equity curve
     st.subheader("Equity Curve")
 
-    equity_df = results.set_index("date")[["equity", "bh_equity"]]
+    equity_df = pd.DataFrame(
+        {
+            "Strategy": results["equity"],
+            "Buy & Hold": bh_equity,
+        }
+    )
+
     st.line_chart(equity_df)
 
-    # =============================
-    # Price & SMAs
-    # =============================
+    # -------- Drawdown
+    st.subheader("Drawdown")
+
+    dd_df = pd.DataFrame(
+        {
+            "Strategy": compute_drawdown(results["equity"]),
+            "Buy & Hold": compute_drawdown(bh_equity),
+        }
+    )
+
+    st.line_chart(dd_df)
+
+    # -------- Price & MAs
     st.subheader("Price & Moving Averages")
 
-    price_df = results.set_index("date")[["close", "sma_fast", "sma_slow"]]
+    price_df = results[["close", "sma_fast", "sma_slow"]]
     st.line_chart(price_df)
 
-    # =============================
-    # Download CSV
-    # =============================
+    # -------- Trades table
+    st.subheader("Trades")
+
+    trades_df = extract_trades(results)
+
+    if trades_df.empty:
+        st.info("No trades executed.")
+    else:
+        st.dataframe(
+            trades_df.style.format(
+                {
+                    "PnL %": "{:.2f}",
+                    "PnL €": "{:.2f}",
+                }
+            ),
+            use_container_width=True,
+        )
+
+    # -------- Download
     st.subheader("Download results")
 
-    csv = results.to_csv(index=False).encode("utf-8")
+    csv = results.reset_index().to_csv(index=False).encode("utf-8")
     st.download_button(
         label="Download results as CSV",
         data=csv,
