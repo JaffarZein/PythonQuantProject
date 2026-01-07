@@ -26,3 +26,5 @@ def run():
     print("\nPerformance metrics:")
     for k, v in metrics.items():
         print(f"{k}: {v:.4f}")
+    print(results[["signal", "position", "returns", "strategy_returns", "equity"]].tail(10))
+    print(metrics)
