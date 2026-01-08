@@ -85,7 +85,7 @@ quant-project/
 - Python 3.8+
 - pip or conda
 
-### Setup
+### Quick Start
 
 1. **Clone the repository**:
 ```bash
@@ -104,22 +104,29 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Required packages:
-- `streamlit` – Interactive web framework
-- `pandas` – Data manipulation
-- `numpy` – Numerical computing
-- `yfinance` – Yahoo Finance data fetching
-- `scikit-learn` – Machine learning models
+4. **Run the application**:
+```bash
+streamlit run app.py
+```
+
+The app will open at `http://localhost:8501`
+
+### Required Dependencies
+- `streamlit>=1.28.0` – Interactive web framework
+- `pandas>=2.0.0` – Data manipulation
+- `numpy>=1.24.0` – Numerical computing
+- `yfinance>=0.2.28` – Yahoo Finance data fetching
+- `scikit-learn>=1.3.0` – Machine learning models
 
 ## Usage
 
-### Running the Streamlit Application
+### Running the Application
 
 ```bash
 streamlit run app.py
 ```
 
-The app will open at `http://localhost:8501` (or specified port).
+The application provides an interactive web interface with two main modules accessible from the sidebar.
 
 ### Quant A Workflow
 
@@ -207,19 +214,52 @@ All dates in the application use **DD/MM/YY** format for consistency:
 - **Backtesting**: Custom vectorized engine
 - **Language**: Python 3.8+
 
+## Deployment
+
+### Streamlit Cloud (Recommended)
+
+The easiest way to share this project with others:
+
+1. Push code to GitHub (already done)
+2. Go to [streamlit.io](https://streamlit.io)
+3. Click "Deploy" → "Connect GitHub repo"
+4. Select repository and branch (`main`)
+5. Share the public link with your professor
+
+**Advantages:**
+- Free tier available
+- Automatic deployment on every push
+- No server configuration needed
+- Easy to share via URL
+
+### Local Deployment
+
+Run directly on your machine:
+```bash
+streamlit run app.py
+```
+
+## Project Status
+
+- ✅ **Quant A** – Complete and tested (SMA, Momentum, forecasting)
+- ✅ **Quant B** – Complete and tested (portfolio analysis, rebalancing)
+- ✅ **Documentation** – Comprehensive README and code comments
+- ✅ **Dependencies** – requirements.txt provided
+- ✅ **Git** – All code on `main` branch, ready for deployment
+
+### Version History
+
+- **Latest**: Quant B fully restored with all portfolio features
+- **Current**: Main branch contains both Quant A and Quant B complete implementations
+- **Branches**: feature/quant-a-improvements, feature/quant-b available for reference
+
 ## Git Workflow
 
-The project uses feature branches:
+The project uses feature branches for development:
 
-- `main` – Stable production code
-- `feature/quant-a-improvements` – Quant A enhancements
-- `feature/quant-b` – Quant B portfolio module
-
-## Performance Considerations
-
-- Caching: Uses `@st.cache_data` for expensive computations
-- Vectorized Operations: Leverages numpy/pandas for fast calculations
-- Large Date Ranges: Performance optimized for multi-year backtests
+- `main` – Stable production code (ready for deployment)
+- `feature/quant-a-improvements` – Quant A development history
+- `feature/quant-b` – Quant B development history
 
 ## Limitations & Future Enhancements
 
@@ -238,10 +278,6 @@ Contributions are welcome! Please:
 ## Support
 
 For issues, questions, or suggestions, please open an issue in the GitHub repository.
-
-## License
-
-This project is open source and available under the MIT License.
 
 ---
 
