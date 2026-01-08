@@ -75,6 +75,11 @@ def run_quant_a():
         st.info("Set parameters and click **Run backtest**.")
         return
 
+    # Validate that Fast SMA < Slow SMA
+    if fast >= slow:
+        st.error("❌ Fast SMA must be less than Slow SMA")
+        return
+
     # ---------- Data ----------
     df = fetch_ohlcv(
         symbol=symbol,
