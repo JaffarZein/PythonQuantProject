@@ -236,21 +236,29 @@ def run_quant_a():
                 }, index=df["date"])
                 st.line_chart(price_df)
 
-            # Trades table for first strategy
+            # Trades table with strategy selection
             st.subheader("📋 Trades")
-            first_strat = list(results_dict.keys())[0]
-            trades_df = build_trades_table(results_dict[first_strat])
+            
+            # Strategy selector for trades
+            selected_strat = st.selectbox(
+                "Select strategy to view trades:",
+                list(results_dict.keys()),
+                help="Choose which strategy's trades to display"
+            )
+            
+            trades_df = build_trades_table(results_dict[selected_strat])
 
             if trades_df.empty:
-                st.info("No trades generated.")
+                st.info("No trades generated for this strategy.")
             else:
                 st.dataframe(trades_df, use_container_width=True)
                 csv = trades_df.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    "Download trades as CSV",
+                    "📥 Download trades as CSV",
                     csv,
-                    file_name="trades.csv",
+                    file_name=f"trades_{selected_strat.lower().replace(' ', '_')}.csv",
                     mime="text/csv",
+                    use_container_width=True
                 )
     
     # ==================== TAB 2: FORECASTING ====================
