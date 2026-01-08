@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime, date, timedelta
 
 from quant_project.fetch_yahoo import fetch_ohlcv
 from quant_project.quant_a.strategy import sma_crossover, momentum_strategy, predict_price
@@ -14,12 +15,61 @@ if "forecast_result" not in st.session_state:
     st.session_state.forecast_result = None
 
 
+# Hide number input spinners with CSS
+st.markdown("""
+    <style>
+    /* Hide spinner buttons in number inputs */
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button {
+        -webkit-appearance: none !important;
+        margin: 0 !important;
+        display: none !important;
+    }
+    input[type=number] {
+        -moz-appearance: textfield !important;
+    }
+    /* Additional styling for cleaner input */
+    input[type=number]::-webkit-outer-spin-button {
+        -webkit-appearance: none !important;
+    }
+    input[type=number]::-webkit-inner-spin-button {
+        -webkit-appearance: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
 # ============================================================
 # Helpers
 # ============================================================
 
+def format_date(date_str: str) -> str:
+    """Convert date string (YYYY-MM-DD) to DD/MM/YY format."""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return dt.strftime("%d/%m/%y")
+    except:
+        return date_str
+
+def parse_date_input(date_str: str) -> str:
+    """Convert DD/MM/YY to YYYY-MM-DD for API."""
+    try:
+        dt = datetime.strptime(date_str, "%d/%m/%y")
+        return dt.strftime("%Y-%m-%d")
+    except:
+        # If already in YYYY-MM-DD format, return as is
+        return date_str
+
+def get_today_formatted() -> str:
+    """Get today's date in DD/MM/YY format."""
+    return datetime.now().strftime("%d/%m/%y")
+
+def get_today_api_format() -> str:
+    """Get today's date in YYYY-MM-DD format for API."""
+    return datetime.now().strftime("%Y-%m-%d")
+
 def build_trades_table(df: pd.DataFrame) -> pd.DataFrame:
-    """Build clean trades table from trade_id"""
+    """Build clean trades table from trade_id with formatted dates"""
     if "trade_id" not in df.columns:
         return pd.DataFrame()
 
@@ -28,13 +78,17 @@ def build_trades_table(df: pd.DataFrame) -> pd.DataFrame:
         entry_date = g["date"].iloc[0] if "date" in g.columns else g.index[0]
         exit_date = g["date"].iloc[-1] if "date" in g.columns else g.index[-1]
 
+        # Format dates
+        entry_str = format_date(str(entry_date)[:10]) if hasattr(entry_date, 'strftime') else format_date(str(entry_date)[:10])
+        exit_str = format_date(str(exit_date)[:10]) if hasattr(exit_date, 'strftime') else format_date(str(exit_date)[:10])
+
         direction = "Long" if g["position"].iloc[0] > 0 else "Short"
         pnl_pct = g["strategy_returns"].sum() * 100
         pnl_eur = g["equity"].iloc[-1] - g["equity"].iloc[0]
 
         trades.append({
-            "Entry date": entry_date,
-            "Exit date": exit_date,
+            "Entry date": entry_str,
+            "Exit date": exit_str,
             "Direction": direction,
             "PnL %": round(pnl_pct, 2),
             "PnL €": round(pnl_eur, 2),
@@ -68,10 +122,10 @@ def run_quant_a():
             col1, col2 = st.columns(2)
             with col1:
                 symbol = st.text_input("Symbol", "AAPL")
-                start_date = st.text_input("Start date", "2020-01-01")
+                start_date_input = st.text_input("Start date (DD/MM/YY)", "01/01/20")
             
             with col2:
-                end_date = st.text_input("End date", "2023-01-01")
+                end_date_input = st.text_input("End date (DD/MM/YY)", get_today_formatted())
                 initial_capital = st.number_input(
                     "Initial capital",
                     min_value=1_000,
@@ -132,6 +186,14 @@ def run_quant_a():
             # Validate SMA strategy if selected
             if use_sma and fast >= slow:
                 st.error("❌ Fast SMA must be less than Slow SMA")
+                return
+
+            # Convert dates from DD/MM/YY to YYYY-MM-DD format for API
+            try:
+                start_date = parse_date_input(start_date_input)
+                end_date = parse_date_input(end_date_input)
+            except Exception as e:
+                st.error(f"Invalid date format: {e}")
                 return
 
             # Fetch data once
@@ -354,8 +416,243 @@ def run_quant_a():
 # ============================================================
 
 def run_quant_b():
-    st.header("Quant B — Advanced Analysis")
-    st.info("Workspace reserved for Quant B. To be implemented.")
+    from quant_project.quant_b.portfolio import (
+        fetch_multiple_assets,
+        align_asset_data,
+        compute_correlation_matrix,
+        compute_portfolio_metrics,
+        compute_portfolio_equity,
+        compute_portfolio_returns,
+        rebalance_portfolio,
+    )
+    
+    st.header("Quant B — Multi-Asset Portfolio Analysis")
+    
+    # Create tabs
+    tab1, tab2, tab3 = st.tabs(["📊 Portfolio Setup", "📈 Analysis", "🔄 Rebalancing"])
+    
+    # ==================== TAB 1: PORTFOLIO SETUP ====================
+    with tab1:
+        st.subheader("Portfolio Configuration")
+        
+        # Date inputs
+        st.write("**📅 Date Range**")
+        col_dates = st.columns(2)
+        with col_dates[0]:
+            start_date_input = st.text_input("Start date (DD/MM/YY)", "01/01/20", key="port_start")
+        with col_dates[1]:
+            end_date_input = st.text_input("End date (DD/MM/YY)", get_today_formatted(), key="port_end")
+        
+        # Capital input
+        st.write("**💰 Portfolio Size**")
+        initial_capital = st.number_input(
+            "Initial capital (€)",
+            min_value=1_000,
+            max_value=1_000_000,
+            value=10_000,
+            step=1_000,
+            key="port_capital"
+        )
+        
+        # Convert dates for later use
+        start_date = parse_date_input(start_date_input)
+        end_date = parse_date_input(end_date_input)
+        
+        # Asset selection - separate input boxes
+        st.write("**📦 Assets Selection**")
+        st.info("Enter up to 5 different assets")
+        
+        asset_cols = st.columns(5)
+        symbols = []
+        
+        for i in range(5):
+            with asset_cols[i]:
+                symbol = st.text_input(
+                    f"Asset {i+1}",
+                    value=["AAPL", "MSFT", "GOOGL", "", ""][i],
+                    placeholder="e.g., AAPL",
+                    key=f"asset_{i}"
+                ).upper().strip()
+                if symbol:
+                    symbols.append(symbol)
+        
+        if not symbols:
+            st.warning("⚠️ Please enter at least 1 asset")
+            return
+        
+        # Asset weights configuration
+        st.write("**⚖️ Asset Weights (%)**")
+        st.info(f"Configure weights for {len(symbols)} assets (must sum to 100%)")
+        
+        # Create weight input boxes in columns - simple like capital input
+        weight_cols = st.columns(len(symbols))
+        weights = {}
+        
+        for idx, col in enumerate(weight_cols):
+            symbol = symbols[idx]
+            
+            with col:
+                weight_pct = st.number_input(
+                    f"{symbol} Weight",
+                    min_value=0,
+                    max_value=100,
+                    value=int(100 / len(symbols)),
+                    step=1,
+                    key=f"weight_{symbol}"
+                )
+                weights[symbol] = weight_pct / 100.0
+        
+        # Check weights sum to 1
+        total_weight = sum(weights.values())
+        
+        if not (0.99 <= total_weight <= 1.01):
+            st.warning(f"⚠️ Weights sum to {total_weight:.2%}, should be 100%")
+        else:
+            st.success(f"✅ Weights sum to {total_weight:.2%}")
+    
+    # ==================== TAB 2: ANALYSIS ====================
+    with tab2:
+        st.subheader("Portfolio Analysis")
+        
+        # Load data (use session state to cache)
+        if "portfolio_data" not in st.session_state:
+            st.session_state.portfolio_data = None
+        
+        if st.button("Analyze Portfolio", key="analyze_btn"):
+            try:
+                with st.spinner("Fetching data..."):
+                    assets_data = fetch_multiple_assets(symbols, start_date, end_date, "1d")
+                
+                if not assets_data:
+                    return
+                
+                with st.spinner("Processing..."):
+                    prices_df = align_asset_data(assets_data)
+                    st.session_state.portfolio_data = {
+                        "prices": prices_df,
+                        "symbols": symbols,
+                        "weights": weights,
+                        "initial_capital": initial_capital,
+                    }
+                
+                st.success("Portfolio data loaded!")
+            
+            except Exception as e:
+                st.error(f"Error: {e}")
+                return
+        
+        # Display analysis if data loaded
+        if st.session_state.portfolio_data is not None:
+            prices_df = st.session_state.portfolio_data["prices"]
+            portfolio_weights = st.session_state.portfolio_data["weights"]
+            
+            # Performance metrics
+            st.subheader("📊 Portfolio Metrics")
+            metrics = compute_portfolio_metrics(prices_df, portfolio_weights, initial_capital)
+            
+            metric_cols = st.columns(5)
+            with metric_cols[0]:
+                st.metric("Total Return", f"{metrics['Total Return']:.2%}")
+            with metric_cols[1]:
+                st.metric("Annual Return", f"{metrics['Annual Return']:.2%}")
+            with metric_cols[2]:
+                st.metric("Volatility", f"{metrics['Volatility']:.2%}")
+            with metric_cols[3]:
+                st.metric("Sharpe Ratio", f"{metrics['Sharpe Ratio']:.2f}")
+            with metric_cols[4]:
+                st.metric("Max Drawdown", f"{metrics['Max Drawdown']:.2%}")
+            
+            # Correlation matrix
+            st.subheader("📊 Correlation Matrix")
+            corr = compute_correlation_matrix(prices_df)
+            st.write(corr.round(3))
+            
+            # Portfolio equity curve
+            st.subheader("📈 Portfolio Equity Curve")
+            portfolio_equity = compute_portfolio_equity(prices_df, portfolio_weights, initial_capital)
+            
+            equity_df = pd.DataFrame({
+                "Portfolio": portfolio_equity.values,
+            }, index=prices_df["date"])
+            
+            st.line_chart(equity_df)
+            
+            # Individual asset prices
+            st.subheader("💹 Individual Asset Prices")
+            asset_prices = prices_df[[col for col in prices_df.columns if col != "date"]]
+            asset_prices.index = prices_df["date"]
+            st.line_chart(asset_prices)
+            
+            # Composition over time (normalized)
+            st.subheader("🎯 Portfolio Composition (Equal-Weight Normalized)")
+            composition_data = {}
+            for symbol in symbols:
+                if symbol in prices_df.columns:
+                    # Normalize each price to start at 1
+                    normalized = prices_df[symbol].values / prices_df[symbol].values[0]
+                    composition_data[symbol] = normalized
+            
+            comp_df = pd.DataFrame(composition_data, index=prices_df["date"])
+            st.line_chart(comp_df)
+    
+    # ==================== TAB 3: REBALANCING ====================
+    with tab3:
+        st.subheader("Portfolio Rebalancing Strategy")
+        
+        if st.session_state.portfolio_data is None:
+            st.warning("⚠️ Run analysis in the previous tab first.")
+            return
+        
+        prices_df = st.session_state.portfolio_data["prices"]
+        portfolio_weights = st.session_state.portfolio_data["weights"]
+        
+        # Rebalancing frequency selection
+        st.write("**🔄 Rebalancing Configuration**")
+        rebalance_freq = st.selectbox(
+            "Rebalancing Frequency",
+            ["daily", "weekly", "monthly", "quarterly", "yearly"],
+            index=2,
+            help="How often to rebalance portfolio back to target weights"
+        )
+        
+        if st.button("Simulate Rebalancing", key="rebalance_btn"):
+            with st.spinner("Simulating..."):
+                # Original (no rebalancing)
+                no_rebal_equity = compute_portfolio_equity(prices_df, portfolio_weights, initial_capital)
+                
+                # With rebalancing
+                rebal_equity = rebalance_portfolio(prices_df, portfolio_weights, initial_capital, rebalance_freq)
+                
+                st.subheader(f"Comparison: With vs Without {rebalance_freq.capitalize()} Rebalancing")
+                
+                comparison_df = pd.DataFrame({
+                    "Buy & Hold": no_rebal_equity.values,
+                    f"Rebalance ({rebalance_freq})": rebal_equity.values,
+                }, index=prices_df["date"])
+                
+                st.line_chart(comparison_df)
+                
+                # Metrics comparison
+                st.subheader("📊 Performance Comparison")
+                
+                # Compute metrics for both strategies
+                no_rebal_return = (no_rebal_equity.iloc[-1] - initial_capital) / initial_capital
+                rebal_return = (rebal_equity.iloc[-1] - initial_capital) / initial_capital
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**Buy & Hold**")
+                    st.metric("Final Value", f"€{no_rebal_equity.iloc[-1]:,.2f}")
+                    st.metric("Total Return", f"{no_rebal_return:.2%}")
+                
+                with col2:
+                    st.markdown(f"**Rebalance ({rebalance_freq.capitalize()})**")
+                    st.metric("Final Value", f"€{rebal_equity.iloc[-1]:,.2f}")
+                    st.metric("Total Return", f"{rebal_return:.2%}")
+                
+                # Difference
+                diff = rebal_equity.iloc[-1] - no_rebal_equity.iloc[-1]
+                st.metric("Difference", f"€{diff:,.2f}", delta=f"{(diff/initial_capital):.2%}")
 
 
 # ============================================================
