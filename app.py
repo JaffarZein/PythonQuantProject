@@ -22,8 +22,8 @@ def build_trades_table(df: pd.DataFrame) -> pd.DataFrame:
     trades = []
 
     for trade_id, g in df.dropna(subset=["trade_id"]).groupby("trade_id"):
-        entry_idx = g.index[0]
-        exit_idx = g.index[-1]
+        entry_date = g["date"].iloc[0] if "date" in g.columns else g.index[0]
+        exit_date = g["date"].iloc[-1] if "date" in g.columns else g.index[-1]
 
         direction = "Long" if g["position"].iloc[0] > 0 else "Short"
 
@@ -31,8 +31,8 @@ def build_trades_table(df: pd.DataFrame) -> pd.DataFrame:
         pnl_eur = g["equity"].iloc[-1] - g["equity"].iloc[0]
 
         trades.append({
-            "Entry index": entry_idx,
-            "Exit index": exit_idx,
+            "Entry date": entry_date,
+            "Exit date": exit_date,
             "Direction": direction,
             "PnL %": round(pnl_pct, 2),
             "PnL €": round(pnl_eur, 2),
@@ -130,9 +130,9 @@ def run_quant_a():
     st.subheader("Equity Curve")
 
     equity_df = pd.DataFrame({
-        "Strategy": results["equity"],
-        "Buy & Hold": bh_df["bh_equity"],
-    })
+        "Strategy": results["equity"].values,
+        "Buy & Hold": bh_df["bh_equity"].values,
+    }, index=df["date"])
 
     st.line_chart(equity_df)
 
@@ -140,9 +140,9 @@ def run_quant_a():
     st.subheader("Drawdown")
 
     dd_df = pd.DataFrame({
-        "Strategy": compute_drawdown(results["equity"]),
-        "Buy & Hold": compute_drawdown(bh_df["bh_equity"]),
-    })
+        "Strategy": compute_drawdown(results["equity"]).values,
+        "Buy & Hold": compute_drawdown(bh_df["bh_equity"]).values,
+    }, index=df["date"])
 
     st.line_chart(dd_df)
 
@@ -150,10 +150,10 @@ def run_quant_a():
     st.subheader("Price & Moving Averages")
 
     price_df = pd.DataFrame({
-        "Close": df["close"],
-        "SMA Fast": df["close"].rolling(fast).mean(),
-        "SMA Slow": df["close"].rolling(slow).mean(),
-    })
+        "Close": df["close"].values,
+        "SMA Fast": df["close"].rolling(fast).mean().values,
+        "SMA Slow": df["close"].rolling(slow).mean().values,
+    }, index=df["date"])
 
     st.line_chart(price_df)
 
